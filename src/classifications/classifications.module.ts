@@ -3,8 +3,12 @@ import { ClassificationsService } from './classifications.service';
 import { ClassificationsController } from './classifications.controller';
 
 @Module({
+
+
+
+
   controllers: [ClassificationsController],
   providers: [ClassificationsService],
   exports: [ClassificationsService],
 })
-export class ClassificationsModule {}
+export class ClassificationsModule { }
