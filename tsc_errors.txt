@@ -1,0 +1,9 @@
+src/dashboard/dashboard.service.spec.ts(140,36): error TS2554: Expected 1 arguments, but got 0.
+src/dashboard/dashboard.service.spec.ts(179,36): error TS2554: Expected 1 arguments, but got 0.
+src/main.ts(17,27): error TS2345: Argument of type 'RedisIoAdapter' is not assignable to parameter of type 'WebSocketAdapter<any, any, any>'.
+  Types of property 'bindMessageHandlers' are incompatible.
+    Type '(socket: Socket<DefaultEventsMap, DefaultEventsMap, DefaultEventsMap, any>, handlers: MessageMappingProperties[], transform: (data: any) => Observable<...>) => void' is not assignable to type '(client: any, handlers: WsMessageHandler<string>[], transform: (data: any) => Observable<any>) => any'.
+      Types of parameters 'handlers' and 'handlers' are incompatible.
+        Type 'WsMessageHandler<string>[]' is not assignable to type 'MessageMappingProperties[]'.
+          Property 'methodName' is missing in type 'WsMessageHandler<string>' but required in type 'MessageMappingProperties'.
+src/notifications/notifications.module.ts(5,30): error TS2307: Cannot find module '../database/prisma.module' or its corresponding type declarations.

@@ -1,0 +1,795 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// Enums
+enum Role {
+  ADMIN
+  ASSISTANT
+  OFFICER
+  SUPERVISOR
+  DEPT_HEAD
+  MANAGER // NEW: Generic manager role
+  EMPLOYEE // NEW: Generic employee role
+  FINANCE_OFFICER
+  LEGAL_OFFICER
+  HR_OFFICER
+}
+
+enum UserStatus {
+  ACTIVE
+  INACTIVE
+  SUSPENDED
+}
+
+// NEW: Universal request types (replaces rigid government structure)
+enum RequestType {
+  IT_SUPPORT
+  PURCHASE_REQUEST
+  HR_REQUEST
+  LEAVE_REQUEST
+  LEGAL_CASE
+  CUSTOMER_COMPLAINT
+  PROJECT_PROPOSAL
+  INVOICE_APPROVAL
+  CONTRACT_REVIEW
+  GENERAL_REQUEST
+  OTHER
+}
+
+enum RequestStatus {
+  DRAFT
+  SUBMITTED
+  IN_REVIEW
+  APPROVED
+  REJECTED
+  ON_HOLD
+  COMPLETED
+  CANCELLED
+}
+
+enum FileStatus {
+  PENDING
+  APPROVED
+  RETURNED
+  REJECTED
+  FORWARDED
+  CLOSED
+  ARCHIVED
+  DISPOSED
+}
+
+// NEW: Enhanced note types for better collaboration
+enum NoteType {
+  DRAFT // Yellow - Editable
+  APPROVED // White - Read-only (Official)
+  COMMENT // Discussion/comment
+  INTERNAL // Internal note (not visible to requestor)
+}
+
+enum InwardType {
+  LETTER
+  MEMO
+  REPORT
+  APPLICATION
+  OTHER
+}
+
+enum MovementAction {
+  CREATE
+  FORWARD
+  APPROVE
+  RETURN
+  REJECT
+  CLOSE
+  ARCHIVE
+  RESTORE
+  DISPOSE
+}
+
+enum ClassificationType {
+  NORMAL
+  CUSTOM
+}
+
+// NEW: Priority levels for requests/files
+enum PriorityLevel {
+  LOW
+  NORMAL
+  HIGH
+  URGENT
+  CRITICAL
+}
+
+// NEW: Confidentiality levels
+enum ConfidentialityLevel {
+  PUBLIC
+  INTERNAL
+  CONFIDENTIAL
+  RESTRICTED
+  SECRET
+}
+
+// NEW: File/Request Categories (flexible classification)
+enum FileCategory {
+  FINANCE
+  HR
+  LEGAL
+  OPERATIONS
+  IT
+  PROCUREMENT
+  ADMIN
+  CUSTOMER_SERVICE
+  PROJECT
+  OTHER
+}
+
+// Users & Authentication
+model User {
+  id           String     @id @default(uuid())
+  email        String     @unique
+  password     String
+  firstName    String
+  lastName     String
+  role         Role
+  status       UserStatus @default(ACTIVE)
+  departmentId String?
+
+  // Profile
+  phone       String?
+  designation String?
+  employeeId  String? @unique
+
+  // Timestamps
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  lastLoginAt DateTime?
+
+  // Relations
+  department Department? @relation(fields: [departmentId], references: [id])
+
+  // File movements
+  sentMovements     FileMovement[] @relation("SentMovements")
+  receivedMovements FileMovement[] @relation("ReceivedMovements")
+
+  // Files created/owned
+  createdFiles File[] @relation("FileCreator")
+  ownedFiles   File[] @relation("FileOwner")
+
+  // Inwards
+  createdInwards Inward[]
+
+  // Notes
+  createdNotes Note[]
+
+  // Audit logs
+  auditLogs AuditLog[]
+
+  // Documents uploaded
+  uploadedDocuments Document[]
+
+  // File Approvals (Advanced Workflow)
+  fileApprovals FileApproval[]
+
+  // Classifications created
+  createdClassifications Classification[]
+  classificationRoutes   ClassificationRoute[]
+
+  // Refresh tokens
+  refreshTokens RefreshToken[]
+
+  // NEW: Requests created/assigned
+  createdRequests  Request[] @relation("RequestCreator")
+  assignedRequests Request[] @relation("RequestAssignee")
+
+  // NEW: Note mentions
+  noteMentions NoteMention[]
+
+  // NEW: SLA escalations
+  escalationsTo SLAEscalation[]
+
+  // Ad-hoc routing back-relations
+  adhocPendingFiles  File[] @relation("AdhocNextUser")
+  adhocApprovedFiles File[] @relation("AdhocApprovedBy")
+
+  // Notifications
+  notifications Notification[] @relation("UserNotifications")
+
+  @@map("users")
+}
+
+model RefreshToken {
+  id        String   @id @default(uuid())
+  token     String   @unique
+  userId    String
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("refresh_tokens")
+}
+
+// Departments
+model Department {
+  id          String   @id @default(uuid())
+  name        String   @unique
+  code        String   @unique
+  description String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  users   User[]
+  inwards Inward[]
+  files   File[]
+
+  @@map("departments")
+}
+
+// Inward Register
+model Inward {
+  id           String   @id @default(uuid())
+  inwardNumber String   @unique // Auto-generated: IN-YYYY-XXXX
+  inwardDate   DateTime @default(now())
+
+  // Sender details
+  senderName    String
+  senderAddress String?
+  senderContact String?
+
+  // Document details
+  subject     String
+  description String?
+  inwardType  InwardType
+
+  // Reference
+  referenceNo   String?
+  referenceDate DateTime?
+
+  // Department
+  departmentId String
+
+  // Created by
+  createdById String
+
+  // Timestamps
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  department Department @relation(fields: [departmentId], references: [id])
+  createdBy  User       @relation(fields: [createdById], references: [id])
+
+  // Linked files
+  files File[]
+
+  // Attached documents
+  documents Document[]
+
+  @@map("inwards")
+}
+
+// File Management
+model File {
+  id          String  @id @default(uuid())
+  fileNumber  String  @unique // Auto-generated with configurable format
+  subject     String
+  description String?
+
+  // Classification & Workflow
+  classificationId   String? // Custom classification with predefined routing
+  workflowCategoryId String?
+  currentStageId     String?
+
+  // Status
+  status FileStatus @default(PENDING)
+
+  // NEW: Enhanced metadata
+  priority        PriorityLevel        @default(NORMAL)
+  confidentiality ConfidentialityLevel @default(INTERNAL)
+  category        FileCategory         @default(OTHER)
+  tags            String[] // Flexible tags
+
+  // NEW: SLA & Due dates
+  dueDate     DateTime?
+  slaHours    Int? // SLA in hours
+  completedAt DateTime?
+
+  // NEW: Master Files (Grouping)
+  isMaster Boolean @default(false)
+  parentId String?
+  parent   File?   @relation("FileHierarchy", fields: [parentId], references: [id])
+  children File[]  @relation("FileHierarchy")
+
+  // NEW: Linked request
+  requestId String?
+
+  // Department
+  departmentId String
+
+  // Ownership
+  createdById    String
+  currentOwnerId String? // Still useful for quick access, but stage determines real ownership
+
+  // Linked inward
+  inwardId String?
+
+  // Ad-hoc routing: allows a user to insert an intermediate approver before the normal next recipient
+  adhocNextUserId   String? // After ad-hoc approver acts, route file to this user
+  adhocApprovedById String? // Records who performed the ad-hoc approval (audit)
+
+  // Timestamps
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+  closedAt   DateTime?
+  archivedAt DateTime?
+
+  // Relations
+  department      Department @relation(fields: [departmentId], references: [id])
+  createdBy       User       @relation("FileCreator", fields: [createdById], references: [id])
+  currentOwner    User?      @relation("FileOwner", fields: [currentOwnerId], references: [id])
+  inward          Inward?    @relation(fields: [inwardId], references: [id])
+  adhocNextUser   User?      @relation("AdhocNextUser", fields: [adhocNextUserId], references: [id])
+  adhocApprovedBy User?      @relation("AdhocApprovedBy", fields: [adhocApprovedById], references: [id])
+
+  // NEW: Request relation
+  request Request? @relation(fields: [requestId], references: [id])
+
+  // Classification relation
+  classification Classification? @relation(fields: [classificationId], references: [id])
+
+  // Workflow relations
+  workflowCategory WorkflowCategory? @relation(fields: [workflowCategoryId], references: [id])
+  currentStage     WorkflowStage?    @relation(fields: [currentStageId], references: [id])
+  approvals        FileApproval[]
+
+  // Notes
+  notes Note[]
+
+  // Documents
+  documents Document[]
+
+  // Movement history
+  movements FileMovement[]
+
+  // NEW: SLA escalations
+  slaEscalations SLAEscalation[]
+
+  // NEW: Notifications
+  notifications Notification[] @relation("FileNotifications")
+
+  @@map("files")
+}
+
+// Workflow Configuration
+model WorkflowCategory {
+  id          String  @id @default(uuid())
+  name        String  @unique // e.g., "Confidential", "Internal", "Finance"
+  description String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  stages WorkflowStage[]
+  files  File[]
+
+  @@map("workflow_categories")
+}
+
+model WorkflowStage {
+  id          String  @id @default(uuid())
+  categoryId  String
+  role        Role // The role responsible for this stage
+  stageOrder  Int // 1, 2, 3...
+  isMandatory Boolean @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  category WorkflowCategory @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+
+  // Relations
+  currentFiles File[]
+  approvals    FileApproval[]
+
+  @@unique([categoryId, stageOrder]) // Ensure unique order per category
+  @@map("workflow_stages")
+}
+
+// File Approval Tracking
+model FileApproval {
+  id      String @id @default(uuid())
+  fileId  String
+  stageId String
+
+  // Action details
+  approvedByUserId String?
+  status           String // PENDING, APPROVED, REJECTED
+  comments         String?
+  actionDate       DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  file       File          @relation(fields: [fileId], references: [id], onDelete: Cascade)
+  stage      WorkflowStage @relation(fields: [stageId], references: [id])
+  approvedBy User?         @relation(fields: [approvedByUserId], references: [id])
+
+  @@map("file_approvals")
+}
+
+// Notes (Yellow Draft / White Approved / Comments)
+model Note {
+  id       String   @id @default(uuid())
+  content  String   @db.Text
+  noteType NoteType @default(DRAFT)
+  version  Int      @default(1)
+
+  // NEW: Parent note for threading/replies
+  parentNoteId String?
+
+  // Reference
+  fileId String
+
+  // Creator
+  createdById String
+
+  // Approval
+  approvedAt   DateTime?
+  approvedById String?
+
+  // NEW: Visibility (for internal notes)
+  isInternal Boolean @default(false)
+
+  // Timestamps
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  file      File @relation(fields: [fileId], references: [id], onDelete: Cascade)
+  createdBy User @relation(fields: [createdById], references: [id])
+
+  // NEW: Threading support
+  parentNote Note?  @relation("NoteReplies", fields: [parentNoteId], references: [id])
+  replies    Note[] @relation("NoteReplies")
+
+  // NEW: Mentions & Attachments
+  mentions    NoteMention[]
+  attachments NoteAttachment[]
+
+  @@map("notes")
+}
+
+// Documents (with BLOB storage in PostgreSQL)
+model Document {
+  id           String @id @default(uuid())
+  filename     String
+  originalName String
+  mimeType     String
+  size         Int // Size in bytes
+
+  // BLOB content stored in PostgreSQL
+  content Bytes @db.ByteA
+
+  // Version control
+  version String @default("1.0")
+
+  // Reference (either inward or file)
+  inwardId String?
+  fileId   String?
+
+  // Uploader
+  uploadedById String
+
+  // Metadata
+  description String?
+  heading     String?
+  checksum    String // SHA-256 for integrity
+
+  // Timestamps
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  inward     Inward? @relation(fields: [inwardId], references: [id], onDelete: SetNull)
+  file       File?   @relation(fields: [fileId], references: [id], onDelete: SetNull)
+  uploadedBy User    @relation(fields: [uploadedById], references: [id])
+
+  @@map("documents")
+}
+
+// File Movement Tracking
+model FileMovement {
+  id String @id @default(uuid())
+
+  // File reference
+  fileId String
+
+  // Movement details
+  fromUserId String?
+  toUserId   String?
+
+  // Action
+  action  MovementAction
+  remarks String?
+
+  // Timestamps
+  createdAt DateTime @default(now())
+
+  // Relations
+  file     File  @relation(fields: [fileId], references: [id], onDelete: Cascade)
+  fromUser User? @relation("SentMovements", fields: [fromUserId], references: [id])
+  toUser   User? @relation("ReceivedMovements", fields: [toUserId], references: [id])
+
+  @@map("file_movements")
+}
+
+// Classification — defines routing order for custom file flows
+model Classification {
+  id          String             @id @default(uuid())
+  name        String             @unique
+  type        ClassificationType @default(NORMAL)
+  description String?
+  createdById String
+  createdAt   DateTime           @default(now())
+  updatedAt   DateTime           @updatedAt
+
+  createdBy User                  @relation(fields: [createdById], references: [id])
+  routes    ClassificationRoute[]
+  files     File[]
+
+  @@map("classifications")
+}
+
+model ClassificationRoute {
+  id               String @id @default(uuid())
+  classificationId String
+  userId           String
+  order            Int
+
+  classification Classification @relation(fields: [classificationId], references: [id], onDelete: Cascade)
+  user           User           @relation(fields: [userId], references: [id])
+
+  @@unique([classificationId, order])
+  @@map("classification_routes")
+}
+
+// Audit Logs
+model AuditLog {
+  id String @id @default(uuid())
+
+  // User who performed action
+  userId String?
+
+  // Action details
+  action   String // CREATE, UPDATE, DELETE, LOGIN, LOGOUT, etc.
+  entity   String // User, File, Inward, Note, etc.
+  entityId String? // ID of affected entity
+
+  // Change tracking
+  oldValue Json?
+  newValue Json?
+
+  // Request details
+  ipAddress String?
+  userAgent String?
+
+  // Timestamps
+  createdAt DateTime @default(now())
+
+  // Relations
+  user User? @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+  @@index([action])
+  @@index([entity])
+  @@index([createdAt])
+  @@map("audit_logs")
+}
+
+// ============================================================================
+// NEW MODELS - Enterprise Features
+// ============================================================================
+
+// Request/Case Management (Universal Entry Point)
+model Request {
+  id            String @id @default(uuid())
+  requestNumber String @unique // Auto-generated: REQ-YYYY-XXXX
+
+  // Request details
+  title       String
+  description String        @db.Text
+  requestType RequestType
+  status      RequestStatus @default(DRAFT)
+
+  // Metadata
+  priority        PriorityLevel        @default(NORMAL)
+  category        FileCategory         @default(OTHER)
+  confidentiality ConfidentialityLevel @default(INTERNAL)
+
+  // Requestor info (can be internal or external)
+  requestorName  String
+  requestorEmail String?
+  requestorPhone String?
+  isInternal     Boolean @default(true) // Internal vs external request
+
+  // Assignment
+  createdById  String
+  assignedToId String?
+  departmentId String?
+
+  // SLA
+  dueDate     DateTime?
+  slaHours    Int?
+  completedAt DateTime?
+
+  // Timestamps
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  createdBy  User  @relation("RequestCreator", fields: [createdById], references: [id])
+  assignedTo User? @relation("RequestAssignee", fields: [assignedToId], references: [id])
+
+  // Converted files
+  files File[]
+
+  // Attached documents
+  documents RequestDocument[]
+
+  // Activity log
+  activities RequestActivity[]
+
+  @@index([requestNumber])
+  @@index([status])
+  @@index([createdById])
+  @@index([assignedToId])
+  @@map("requests")
+}
+
+// Request Document Attachment
+model RequestDocument {
+  id           String @id @default(uuid())
+  requestId    String
+  filename     String
+  originalName String
+  mimeType     String
+  size         Int
+  content      Bytes  @db.ByteA
+  uploadedById String
+
+  createdAt DateTime @default(now())
+
+  request Request @relation(fields: [requestId], references: [id], onDelete: Cascade)
+
+  @@map("request_documents")
+}
+
+// Request Activity Log
+model RequestActivity {
+  id          String  @id @default(uuid())
+  requestId   String
+  action      String // CREATED, ASSIGNED, STATUS_CHANGED, COMMENTED, etc.
+  description String?
+  metadata    Json?
+
+  createdAt DateTime @default(now())
+
+  request Request @relation(fields: [requestId], references: [id], onDelete: Cascade)
+
+  @@map("request_activities")
+}
+
+// File Numbering Configuration
+model FileNumberingConfig {
+  id String @id @default(uuid())
+
+  // Category-based numbering
+  category FileCategory @unique
+
+  // Format template: {PREFIX}-{YYYY}-{SEQUENCE}
+  prefix String // e.g., "FIN", "HR", "LEGAL"
+  format String // e.g., "{PREFIX}-{YYYY}-{SEQ:5}" where SEQ:5 = 5 digit sequence
+
+  // Sequence tracking
+  currentYear Int
+  currentSeq  Int @default(0)
+
+  // Active status
+  isActive Boolean @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("file_numbering_configs")
+}
+
+// SLA Escalation Tracking
+model SLAEscalation {
+  id String @id @default(uuid())
+
+  // File reference
+  fileId String
+
+  // Escalation details
+  escalatedTo String // User ID
+  reason      String // "OVERDUE", "APPROACHING_DUE", "MANUAL_ESCALATION"
+  escalatedAt DateTime @default(now())
+
+  // Resolution
+  resolvedAt DateTime?
+  resolvedBy String?
+  resolution String?
+
+  // Relations
+  file File @relation(fields: [fileId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [escalatedTo], references: [id])
+
+  @@index([fileId])
+  @@index([escalatedTo])
+  @@map("sla_escalations")
+}
+
+// Note Mentions (@username)
+model NoteMention {
+  id       String @id @default(uuid())
+  noteId   String
+  userId   String
+  position Int // Character position in note content
+
+  createdAt DateTime @default(now())
+
+  note Note @relation(fields: [noteId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id])
+
+  @@unique([noteId, userId, position])
+  @@map("note_mentions")
+}
+
+// Note Attachments
+model NoteAttachment {
+  id           String @id @default(uuid())
+  noteId       String
+  filename     String
+  originalName String
+  mimeType     String
+  size         Int
+  content      Bytes  @db.ByteA
+
+  createdAt DateTime @default(now())
+
+  note Note @relation(fields: [noteId], references: [id], onDelete: Cascade)
+
+  @@map("note_attachments")
+}
+
+// ============================================================================
+// Notifications
+// ============================================================================
+
+model Notification {
+  id         String   @id @default(uuid())
+  userId     String
+  type       String   // WORKFLOW_APPROVAL | WORKFLOW_REJECTED | WORKFLOW_COMPLETED | REQUEST_STATUS | FILE_ASSIGNED | GENERAL
+  title      String
+  message    String
+  entityId   String?
+  entityType String?
+  link       String?
+  fileId     String?
+  read       Boolean  @default(false)
+  createdAt  DateTime @default(now())
+
+  user User  @relation("UserNotifications", fields: [userId], references: [id], onDelete: Cascade)
+  file File? @relation("FileNotifications", fields: [fileId], references: [id])
+
+  @@index([userId])
+  @@index([userId, read])
+  @@index([fileId])
+  @@map("notifications")
+}
