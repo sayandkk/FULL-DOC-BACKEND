@@ -17,6 +17,9 @@ RUN npm install --omit=dev
 # ── Stage 2: Production ─────────────────────────────────────────────────────────
 FROM node:22-alpine AS production
 
+# Install Ghostscript for PDF compression
+RUN apk add --no-cache ghostscript
+
 WORKDIR /app
 
 # Copy only what is needed

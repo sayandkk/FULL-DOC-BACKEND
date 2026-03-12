@@ -16,6 +16,7 @@ import { WorkflowModule } from './workflow/workflow.module';
 import { ClassificationsModule } from './classifications/classifications.module';
 import { RequestsModule } from './requests/requests.module';
 import { NotificationsModule } from './notifications/notifications.module';
+import { PdfModule } from './pdf/pdf.module';
 import { AuditInterceptor } from './audit/interceptors/audit.interceptor';
 
 @Module({
@@ -38,6 +39,7 @@ import { AuditInterceptor } from './audit/interceptors/audit.interceptor';
     ClassificationsModule,
     RequestsModule,
     NotificationsModule,
+    PdfModule,
   ],
   providers: [
     {
@@ -46,4 +48,4 @@ import { AuditInterceptor } from './audit/interceptors/audit.interceptor';
     },
   ],
 })
-export class AppModule {}
+export class AppModule { }

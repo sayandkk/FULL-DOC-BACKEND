@@ -40,6 +40,9 @@ export class DashboardService {
       ];
     }
 
+    const sevenDaysAgo = new Date();
+    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+
     const [
       pendingFiles,
       approvedFiles,
@@ -51,6 +54,8 @@ export class DashboardService {
       myFiles,
       overdueFiles,
       slaEscalationsOpen,
+      storageResult,
+      recentMovements,
     ] = await Promise.all([
       (this.prisma as any).file.count({
         where: { ...fileWhere, status: 'PENDING' },
@@ -64,10 +69,10 @@ export class DashboardService {
       (this.prisma as any).file.count({
         where: { ...fileWhere, status: 'ARCHIVED' },
       }),
-      this.prisma.inward.count({
+      (this.prisma as any).inward.count({
         where: user.role === 'ADMIN' ? {} : { departmentId: user.departmentId },
       }),
-      this.prisma.user.count({
+      (this.prisma as any).user.count({
         where: {
           status: 'ACTIVE',
           ...(user.role === 'ADMIN' ? {} : { departmentId: user.departmentId }),
@@ -94,7 +99,32 @@ export class DashboardService {
             : {}),
         },
       }),
+      (this.prisma as any).document.aggregate({
+        _sum: { size: true }
+      }),
+      (this.prisma as any).fileMovement.findMany({
+        where: {
+          createdAt: { gte: sevenDaysAgo },
+        },
+        select: { createdAt: true }
+      }),
     ]);
+
+    const totalStorageBytes = storageResult._sum?.size || 0;
+
+    const weeklyTrend = Array(7).fill(0);
+    const endOfDay = new Date();
+    endOfDay.setHours(23, 59, 59, 999);
+    let filesProcessedThisWeek = 0;
+
+    recentMovements.forEach((m: any) => {
+      const diffTime = Math.abs(endOfDay.getTime() - new Date(m.createdAt).getTime());
+      const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+      if (diffDays >= 0 && diffDays < 7) {
+        weeklyTrend[6 - diffDays]++;
+        filesProcessedThisWeek++;
+      }
+    });
 
     return {
       overview: {
@@ -106,6 +136,9 @@ export class DashboardService {
         totalUsers,
         overdueFiles,
         slaEscalationsOpen,
+        filesProcessedThisWeek,
+        weeklyTrend,
+        totalStorageBytes,
       },
       personal: {
         myPendingFiles,
