@@ -18,6 +18,7 @@ import { RequestsModule } from './requests/requests.module';
 import { NotificationsModule } from './notifications/notifications.module';
 import { PdfModule } from './pdf/pdf.module';
 import { AuditInterceptor } from './audit/interceptors/audit.interceptor';
+import { GeminiModule } from './gemini/gemini.module';
 
 @Module({
   imports: [
@@ -40,6 +41,7 @@ import { AuditInterceptor } from './audit/interceptors/audit.interceptor';
     RequestsModule,
     NotificationsModule,
     PdfModule,
+    GeminiModule,
   ],
   providers: [
     {
